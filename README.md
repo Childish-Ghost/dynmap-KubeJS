@@ -152,22 +152,30 @@ $env:JAVA_HOME = 'C:\Program Files\Java\jdk-17'
 
 首次构建约 10 分钟（要下载 Gradle 发行版、ForgeGradle 与 MC 1.20 依赖）；之后有缓存约 1 分钟。
 
-### ⚠️ 本分支对 `settings.gradle` 的改动
+### ⚠️ 本分支只保留 `forge-1.20`
 
-上游 `settings.gradle` 声明了 **40+ 个子项目**（含 17 个 Fabric 版本）。Gradle 默认会**无条件配置全部子项目**，导致每个 Fabric 模块都通过 Loom 去下载对应版本的 Minecraft，合计十几 GB——即使你只想构建 `:forge-1.20`。
+上游仓库包含 **40+ 个平台模块**：spigot、15 个 `bukkit-helper-*`、10 个 Fabric 版本、9 个 Forge 版本。
 
-而 `:forge-1.20:build` 实际只需要三个项目：
+本分支把它们全部删除，只留 `forge-1.20`。两个原因：
+
+1. **构建会被拖垮。** Gradle 默认**无条件配置全部子项目**——即使只想构建 `:forge-1.20`，每个 Fabric 模块也会通过 Loom 去下载对应版本的 Minecraft，合计十几 GB。
+2. **本分支只为 MC 1.20 / 1.20.1 Forge 服务器服务。**
+
+`:forge-1.20:build` 实际只需要三个项目：
 
 ```
 :forge-1.20 → :DynmapCore → :DynmapCoreAPI
 ```
 
-因此本分支把 `settings.gradle` 收窄为这三个项目。**副作用**：本分支无法再构建 Bukkit / Spigot / Fabric 目标。
+因此其余 **35 个平台模块已从仓库删除**，`settings.gradle` 也收窄为这三个项目。
 
-需要恢复完整平台支持：
+需要完整的多平台源码时，从上游标签取：
 
 ```bash
-git show v3.6:settings.gradle > settings.gradle
+git remote add upstream https://github.com/webbukkit/dynmap.git
+git fetch upstream --tags
+git show v3.6:settings.gradle        # 查看原始文件
+git checkout v3.6                    # 或直接切到该标签
 ```
 
 （代价是重新面对上面那个多版本下载问题。）

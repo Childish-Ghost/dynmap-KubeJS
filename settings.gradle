@@ -1,15 +1,14 @@
 pluginManagement {
   repositories {
     gradlePluginPortal()
-    maven { url "https://papermc.io/repo/repository/maven-public/" }
-    maven { url "https://maven.fabricmc.net/" }
   }
 }
 
 rootProject.name = 'dynmap-common'
 
-/* Minimal build surface: only what :forge-1.20:build needs.
-   Original 40+ project settings.gradle is preserved as settings.gradle.orig */
+/* This fork keeps only the Minecraft 1.20 / 1.20.1 Forge platform. The other platform
+   modules (spigot, bukkit-helper-*, fabric-*, and the other forge-* versions) have been
+   removed from the repository. Full multi-platform source: upstream tag v3.6. */
 
 include ':DynmapCoreAPI'
 include ':DynmapCore'

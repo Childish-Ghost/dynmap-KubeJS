@@ -4,8 +4,6 @@
 
 Dynmap 的 Forge 端在 `ServerAboutToStartEvent` 注册命令，对 Forge 1.19+ 来说太晚 —— 日志显示注册成功，命令却无法执行。本分支改为在 `RegisterCommandsEvent` 注册。
 
-只保留 MC 1.20 / 1.20.1 Forge 平台。
-
 ## 用法
 
 与原版 Dynmap 完全一致：

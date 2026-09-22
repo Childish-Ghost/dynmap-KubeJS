@@ -125,6 +125,7 @@ public class DynmapMod
     public void onServerStarted(ServerStartedEvent event) {
         DynmapCommonAPIListener.register(new APICallback()); 
         plugin.serverStarted();
+        plugin.apiAutoRender();   /* Dynmap-KubeJS API patch: config-driven startup render */
     }
 
     @SubscribeEvent

@@ -1,156 +1,268 @@
-# Dynmap®  - dynamic web maps for Minecraft servers
+# Dynmap-KubeJS
 
-# Jump around the README
-* [How to build](#how-to-build)
-* [What platforms are supported?](#what-platforms-are-supported)
-* [Data Storage](#data-storage)
-* [Contributing to Dynmap's Code](#contributing-to-dynmaps-code)
-* [Porting, Supporting Other Platforms, Customized Dynmap Builds](#porting-supporting-other-platforms-customized-dynmap-builds)
-* [Where to go for questions and discussions](#where-to-go-for-questions-and-discussions)
-* [Where to go to make donations](#where-to-go-to-make-donations)
-# How to build
-Dynmap 3.x+ uses Gradle for building support for all platforms, with all resulting artifacts produced in the /targets directory.  Due to Minecraft 1.18.x+ requirements, the developer's
-default JDK must be a JDK 17 (or later) versions - older versions will still be compiled
-to run on the default JDK for those platforms (JDK 8, or JDK 16 for 1.17.x), and common libraries are built JDK 8.
+> **TL;DR (English)** — A fork of [Dynmap](https://github.com/webbukkit/dynmap) 3.6 for **Minecraft 1.20.1 / Forge** that adds a render entry point **bypassing Minecraft's command dispatcher**, so map rendering still works on servers where Dynmap's `/dynmap` command fails to register. Prebuilt jar is on the [Releases](../../releases) page.
+>
+> 中文说明见下。
 
-To build and get all jars in `target/`, run:
+---
 
-    ./gradlew setup build
-    
-Or (on Windows):
+## 这是什么
 
-    gradlew.bat setup build
-    
-The Forge 1.12.2 versions (specifically ForgeGradle for these) are very sensitive to being built by JDK 8, so to build them, 
-set JAVA_HOME to correspond to a JDK 8 installation, then build using the following;
+这是 [Dynmap](https://github.com/webbukkit/dynmap) 的一个派生分支，基线是上游 **`v3.6`** 标签（commit `cee25bc518`）。
 
-    cd oldgradle
-    ./gradlew setup build
-    
-Or (on Windows):
+它在原版 Dynmap 之上只做了一件事：**给 Dynmap 内核加了一个不经过 Minecraft 命令系统的渲染入口**，用于绕开「`/dynmap` 命令注册成功但无法执行」的问题。
 
-    cd oldgradle
-    gradlew.bat setup build
+除补丁涉及的两个文件外，其余代码与上游 `v3.6` 完全一致。
 
-Those familiar with gradle can save time by specifying a build (or commenting in settings.gradle) BUT this is not suitable for uploading DEV code changes.
+---
 
-NOTE: PR code submissions MUST be built and TESTED for ALL platforms (including oldgradle), or be rejected and negatively influence future approvals. 
-For more check [contributing rules](#contributing-to-dynmaps-code).
+## 背景：`/dynmap` 命令失效
 
-    ./gradlew :fabric-1.18:build
+### 现象
 
-    
-# What platforms are supported?
-The following target platforms are supported, and you can find them at the links supplied:
+在 Minecraft **1.20.1 / Forge 47.4.16** 服务器上：
 
-| Server type  | Version | Dynmap JAR | Where? |
-| ------------ | ------- | ---------- | ------ |
-| Spigot/PaperMC | ≤1.20.1  | `Dynmap-<version>-spigot.jar` | [SpigotMC](https://www.spigotmc.org/resources/dynmap.274/) |
-| Spigot/PaperMC | ≤1.20.1 | `Dynmap-<version>-spigot.jar` | [Bukkit](https://dev.bukkit.org/projects/dynmap) |
-| Forge | 1.12.2 | `Dynmap-<version>-forge-1.12.2.jar` | [Curseforge](https://www.curseforge.com/minecraft/mc-mods/dynmapforge)|
-| Forge | 1.14.4 | `Dynmap-<version>-forge-1.14.4.jar` | [Curseforge](https://www.curseforge.com/minecraft/mc-mods/dynmapforge)|
-| Forge | 1.15.2 | `Dynmap-<version>-forge-1.15.2.jar` | [Curseforge](https://www.curseforge.com/minecraft/mc-mods/dynmapforge)|
-| Forge | 1.16.5 | `Dynmap-<version>-forge-1.16.5.jar` | [Curseforge](https://www.curseforge.com/minecraft/mc-mods/dynmapforge) |
-| Forge | 1.17.1 | `Dynmap-<version>-forge-1.17.1.jar` | [Curseforge](https://www.curseforge.com/minecraft/mc-mods/dynmapforge) |
-| Forge | 1.18.2 | `Dynmap-<version>-forge-1.18.2.jar`   | [Curseforge](https://www.curseforge.com/minecraft/mc-mods/dynmapforge) |
-| Forge | 1.19, 1.19.1 | `Dynmap-<version>-forge-1.19.jar`   | [Curseforge](https://www.curseforge.com/minecraft/mc-mods/dynmapforge) |
-| Forge | 1.19.2 | `Dynmap-<version>-forge-1.19.2.jar`   | [Curseforge](https://www.curseforge.com/minecraft/mc-mods/dynmapforge) |
-| Forge | 1.19.3, 1.19.4 | `Dynmap-<version>-forge-1.19.3.jar`   | [Curseforge](https://www.curseforge.com/minecraft/mc-mods/dynmapforge) |
-| Forge | 1.20, 1.20.1 | `Dynmap-<version>-forge-1.20.jar`   | [Curseforge](https://www.curseforge.com/minecraft/mc-mods/dynmapforge) |
-| Fabric | 1.15.2 | `Dynmap-<version>-fabric-1.15.2.jar` | [Curseforge](https://www.curseforge.com/minecraft/mc-mods/dynmapforge) |
-| Fabric | 1.16.4, 1.16.5 | `Dynmap-<version>-fabric-1.16.4.jar` | [Curseforge](https://www.curseforge.com/minecraft/mc-mods/dynmapforge) |
-| Fabric | 1.17.1 | `Dynmap-<version>-fabric-1.17.1.jar` | [Curseforge](https://www.curseforge.com/minecraft/mc-mods/dynmapforge) |
-| Fabric | 1.18.2 | `Dynmap-<version>-fabric-1.18.2.jar`   | [Curseforge](https://www.curseforge.com/minecraft/mc-mods/dynmapforge) |
-| Fabric | 1.19 | `Dynmap-<version>-fabric-1.19.jar`   | [Curseforge](https://www.curseforge.com/minecraft/mc-mods/dynmapforge) |
-| Fabric | 1.19.1, 1.19.2 | `Dynmap-<version>-fabric-1.19.1.jar`   | [Curseforge](https://www.curseforge.com/minecraft/mc-mods/dynmapforge) |
-| Fabric | 1.19.3 | `Dynmap-<version>-fabric-1.19.3.jar`   | [Curseforge](https://www.curseforge.com/minecraft/mc-mods/dynmapforge) |
-| Fabric | 1.19.4 | `Dynmap-<version>-fabric-1.19.4.jar`   | [Curseforge](https://www.curseforge.com/minecraft/mc-mods/dynmapforge) |
-| Fabric | 1.20, 1.20.1 | `Dynmap-<version>-fabric-1.20.jar`   | [Curseforge](https://www.curseforge.com/minecraft/mc-mods/dynmapforge) |
-    
-# Data Storage
-Dynmap supports the following storage backends:
-- Flat files: The default for a new installation
-- MySQL†
-- SQLite†
-- PostgreSQL (JDBC driver for this is now bundled with the Dynmap JAR)
-- MariaDB - is compatible with MySQL
-- AWS S3 (allows S3 bucket to be used for storage AND as web site host)
-- †Note: drivers for SQL are usually included for Spigot and its derivatives but not included with other platforms or Dynmap. For Forge and Fabric servers we recommend Kosma's [SQLite mod](https://www.curseforge.com/minecraft/mc-mods/sqlite-jdbc) or [MySQL mod](https://www.curseforge.com/minecraft/mc-mods/mysql-jdbc) to add the needed drivers. Additionally, injecting driver classes into jar file will be recognized and supported.
+| 项目 | 状态 |
+|---|---|
+| Dynmap Web 地图 | ✅ 正常（`http://<服务器>:8123`） |
+| 方块渲染 / 增量更新 | ✅ 正常 |
+| 命令注册 | ✅ 日志打印 `[Dynmap] Register commands` |
+| **`/dynmap` 手动触发渲染** | ❌ **无法执行** |
+| `/spark`、原版命令 | ✅ 正常 |
 
-# Contributing to Dynmap's Code
-The Dynmap team welcomes Pull Requests with fixes, new features, and new platform support.  That said, the following rules apply:
-- Ultimately, we reserve the right to accept or deny a PR for any reason: fact is, by accepting it, we're also accepting any of the problems with supporting it,
-explaining it to users, and fixing current and future problems - if we don't think the PR is of value consistent with that cost, we'll probably not accept it.
-- All PRs should be as small as they can be to accomplish the feature or fix being supplied.  To that end:
-   - Do not lump multiple features into one PR - you'll be asked to split them up before they will be reviewed or accepted
-   - Do not make style changes, reflow code, pretty printing, or otherwise make formatting-only code changes.  This makes the PR excessively large, 
-   creating changes to be reviewed that don't actually do anything (but we have to review them to be sure they aren't being used to disguise security 
-   compromises or other malicious code), and they create problems with the MANY people who fork Dynmap for the sake of doing PRs or their own private
-   custom builds - since all theose modified lines create merge conflicts - once again, with no actual function having been accomplished.  If we decide
-   the code needs to be 'prettied up', it'll be done by the Dynmap team.
-- Do not make changes to core code (anything in DynmapCore or DynmapCoreAPI) unless you're ready to build and test it on all supported platforms.  Code that
-breaks building of ANY supported platform will be rejected.
-- Likewise, any Spigot related changes are expected to function correctly on all supported Spigot and PaperMC versions (currently 1.10.2 through 1.18.1).  
-- Do not include any code that involves platform specific native libraries or command line behaviors.  Dynmap supports 32-bit and 64-bit, Windows, lots of
-Linux versions (both x86 and ARM), MacOS, being used in Docker environments, and more - this is all about staying as 'pure Java' as the Minecraft server itself
-is.  If your PR includes platform specific dependencies that are not coded to handle working on all the above platforms properly, the PR will be rejected.
-- Dynmap's code is Apache Public License v2 - do not include any code that is not compatible with this license.  By contributing code, you are agreeing to
-that code being subject to the APL v2.
-- Do not include any code that unconditionally adds to Dynmap's hosting requirements - for example, support for a database can be added, but the use of the
-database (which likely depends on a database server being deployed and configured by the user) cannot become an unconditional requirement in order to run
-Dynmap.  Features can add the option to exploit new or additional technologies, but cannot add unconditionally to the minimum requirements on the supported
-platforms (which is what is needed to run the corresponding MC server, plus the Dynmap plugin or mod)
-- Dynmap is built and supports running on Java 8 - it can run on newer versions, but any contributed code and dependencies MUST support being compiled and run
-using just Java 8.
-- Don't introduce other language dependencies - Java only: no Kotlin, Scala, JRuby, whatever. They just add runtime dependencies that most of the platforms lack,
-and language skills above and beyond the Java language requirements the code base already mandates, which just creates obstacles to other people contributing.
-- Similarly, do not update existing libraries and dependencies - these are often tied to the versions on various platforms, and updates will likely break runtime
-- Do not include code specific to other plugins or mods.  Dynmap has APIs for the purpose of avoiding the problem of working with other mods - there are many 
-'Dynmap-XXX' mods and plugins which use the APIs to provide support for other mods and plugins (WorldGuard, Nucleus, Citizens, dozens of others).  Maintaining
-interfaces in Dynmap particular to dozens of mods on multiple versions of multiple platforms is unmanageable, so we don't do it.  The ONLY exception currently
-are security mods - although, even for those, leverage of platform-standard security interfaces is always preferred (e.g. Sponge or Bukkit standard permissions)
+即 Dynmap **功能是好的**，只是无法通过命令主动触发全图/半径渲染。
 
-# Porting, Supporting Other Platforms, Customized Dynmap Builds
-While Dynmap is open source, subject to the Apache Public License, v2, the Dynmap team does have specific policies and requirements for anyone that would
-use the code here for anything except building contributions submitted back to this code base as Pull Requests (which is the only process by which code is accepted and can become part of a release supported by the Dynmap team).  Other authorized uses include:
+### 排查过程中的关键事实
 
-- Building custom version of Dynmap for use on a personal or on a specific server, so long as this version is NOT distributed to other parties. 
-The modifying team agrees to not pursue support from the Dynmap team for this modified private version, but is otherwise not required to share the 
-modified source code - though doing so is encouraged.
-- Building a modified version of Dynmap for otherwise unsupported platforms: in this event, the modified version MUST be for a platform or version 
-not yet (or no longer) supported by the Dynmap team.  If the Dynmap team comes to support this platform or version, the modifying team must agree to
-cease distribution of the unofficial version, unless otherwise authorized to continue doing so.  Further:
-    - The team distributing the modified version must cite the origin of the Dynmap code, but must also clearly indicate that the version is NOT supported by
-    nor endorsed by the Dynmap team, and that ALL support should be directed through the team providing the modified version.
-    - Any modified version CANNOT be monetized or otherwise charged for, under any circumstances, nor can redistribution of it be limited or restricted.
-    - The modified code must continue to be Apache Public License v2, with no additional conditions or restrictions, including full public availability of the
-    modified source code.
-    - Any code from Dynmap used in such versions should be built from an appropriate fork, as DynmapCore and other components (other than DynmapCoreAPI and 
-    dynmap-api) are subject to breaking changes at any time, and the support messages in DynmapCore MUST be modified to refer to the supporting team (or, at
-    least, removed).  The modified version should NOT refer to the Dynmap Discord nor to /r/Dynmap on Reddit for support. in any case.
-    - Any bugs or issues opened in conjunction with the use of the modified version on this repository will be closed without comment.
+- Forge 生命周期顺序为 `RegisterCommandsEvent` → `ServerAboutToStartEvent` → `ServerStartedEvent`，且 `allowLogins` 是在 `ServerStartedEvent` **之后**才置位的。
+- 服务器曾因 DynmapBlockScan 扫描期间的 `Invalid modellist patch` 刷屏触发 `ServerHangWatchdog`（单 tick 超 60 秒）。已通过把 `server.properties` 的 `max-tick-time` 提到 `1800000` 解决，**与本次改动无关**，但排查时容易混淆。
+- 社区有指向 KubeJS 的说法。但实际检查 KubeJS 2001 的 mixin 源码后可以确认：其 mixin 只注入 `MinecraftServer` 的 `<init>` / `tickServer` / `reloadResources`，以及给 `CommandSourceStack` 增加一个 `kjs$sendSuccess` 重载，**不触碰 `Commands` 与命令派发器**。
 
-Additions of new functions, including new platform support, in this official Dynmap code base MUST be fully contained within the PRs submitted to this 
-repository.  Further, it is always expected than any updates will be built and tested across all relevant platforms - meaning any chances to shared code 
-components (DynmapCore, DynmapCoreAPI) MUST be successfully built and tested on ALL supported platforms (Forge, Spigot, etc).  Changes which break 
-supported platforms will be rejected.
+> ⚠️ **诚实说明**：`/dynmap` 失效的**根因至今未被证实**。KubeJS 是嫌疑人之一，但证据不足以下定论。
+>
+> 本分支**没有去修根因**，而是让渲染**绕开命令系统**——所以即使根因始终不明，渲染照样能跑。
 
-The only interfaces published and maintained as 'stable' are the interfaces of the DynmapCoreAPI (cross platform) and dynmap-api (Bukkit/spigot specific) 
-libraries.  All other components are NOT libraries - DynmapCore, in particular, is a shared code component across the various platforms, but is subject to 
-breaking changes without warning or consideration - any use of DynmapCore interfaces by code outside this repository is NOT supported, and will likely 
-result in breaking of such consuming code without warning and without apology.  DynmapCore is an internal shared code component, not a library - please
-treat it accordingly.
+---
 
-Plugins or mods using the published APIs - DynmapCoreAPI (for all platforms) or dynmap-api (only for Spigot/Bukkit) - may access these components as 
-'compile' dependencies: DO NOT INTEGRATE THEM INTO YOUR PLUGIN - this will break Dynmap and/or other plugins when these interfaces are updated or 
-expanded.  These libraries are published at https://repo.mikeprimm.com and will be updated each official release.
+## 补丁做了什么
 
-# Where to go for questions and discussions
-We have a Discord located at https://discord.gg/52pqBpw
-We also have a subreddit located at https://www.reddit.com/r/Dynmap/
+改动共 **2 个文件、+70 行**，全部落在非核心类中。
 
-# Where to go to make donations
-I've set up a coffee-fund jar (I believe in the theory that software developers are machines that turn caffeine into code), for anyone who wants to throw in some tips!  I've got a Patreon here - https://www.patreon.com/dynmap, and for folks just looking to for a one-time coffee buy, hit my Ko-Fi at https://ko-fi.com/michaelprimm !
+### 1. `DynmapPlugin.apiRunCommand(String)`
 
+```java
+public boolean apiRunCommand(String cmdline)
+```
 
-Dynmap is a registered trademark of  Michael Primm, TX USA.  All Rights Reserved.
+等价于在服务器控制台敲 `/dynmap <cmdline>`，但**不经过命令派发器**，直接把命令字符串交给 Dynmap 内核自己的命令处理器 `DynmapCore.processCommand(...)`。
+
+### 2. `DynmapPlugin.apiAutoRender()`
+
+读取配置项，在服务器启动完成后自动触发一次半径渲染。由 `DynmapMod.onServerStarted()` 调用。
+
+### 这两处是怎么协同的
+
+```java
+DynmapCommandSender dsender = new ForgeCommandSender() {   // 复用无参构造：内部 sender 保持 null
+    @Override public void sendMessage(String msg) { Log.info("[api] " + msg); }   // 但 sendMessage 永不空指针
+};
+return core.processCommand(dsender, "dynmap", cmd, args);
+```
+
+`ForgeCommandSender` 的无参构造函数会把内部的 `sender` 留为 `null`，而它自己的 `sendMessage()` 是空安全的。Dynmap 的渲染路径（`MapManager.renderWorldRadius` / `renderFullWorld`）里有若干处会无条件调用 `sender.sendMessage(...)`——用一个非空的匿名子类顶上去，就永远不会空指针，**因此完全不需要改动 `MapManager`**。
+
+### 启动时序（已验证）
+
+```
+DynmapMod.onServerStarted
+  └─ plugin.serverStarted()   → onStart() → core.enableCore(null)
+                                 → initConfiguration(null) → configuration = new ConfigurationNode(f)
+  └─ plugin.apiAutoRender()   ← 此刻 core 与 configuration 必定已就绪
+```
+
+---
+
+## 方案对比
+
+| | 方案甲 | **方案乙2（本分支采用）** |
+|---|---|---|
+| 改动位置 | `MapManager` + 把 `renderWorldRadius` 改 `public` + 3 处判空 | `DynmapPlugin` 内新增 2 个方法 + `DynmapMod` 1 行 |
+| 是否触碰核心类 | 是 | **否** |
+| 需要 AccessTransformer | 否 | 否 |
+| 需要 `createCommandSourceStack` | 否 | 否 |
+| 需要 KubeJS 参与 | 否 | **否** |
+| 与 DynmapBlockScan 兼容 | 签名变更，有风险 | **零风险（无签名变更）** |
+| sender 为 null | 打补丁绕开 | 匿名子类顶替，永不空指针 |
+
+放弃的其他路线：改用 BlueMap（需要 Java 21，且 `BluemapCreateEntityAddon` 要求 BlueMap ≥ 5.7）、KubeJS 运行时 mixin 注入（KubeJS 不支持）、KubeJS 脚本反射（`renderWorldRadius` 是包级私有）、编辑 `run.sh` / `-Xbootclasspath/a:` / `-Djava.class.path`（均无效）。
+
+---
+
+## 配置
+
+在 `dynmap/configuration.txt` 中追加：
+
+```yaml
+autorender-radius: 1000
+autorender-world: world     # 可选，默认 world
+autorender-map: flat        # 可选，默认 flat
+```
+
+`autorender-radius` ≤ 0 或缺失时，自动渲染**不启用**（启动日志会说明）。
+
+渲染中心坐标目前**固定为 `0 0`**。需要别的中心点，或想要 `autorender-x` / `autorender-z` 配置项，改 `apiAutoRender()` 即可。
+
+`apiRunCommand` 是 `public` 方法，`DynmapMod.plugin` 是 `public static`，所以任何模组（包括 KubeJS）都可以反射调用：
+
+```java
+DynmapMod.plugin.apiRunCommand("radiusrender world 0 0 1000 flat");
+```
+
+但**默认路径完全不需要 KubeJS**——服务器启动时自动渲染。
+
+---
+
+## 构建
+
+### 环境要求
+
+| 项目 | 版本 |
+|---|---|
+| JDK | **17**（必须是 17，不能用 21） |
+| Gradle | 7.4.2（wrapper 会自动下载） |
+| ForgeGradle | 5.1.+（`forge-1.20/build.gradle` 中声明） |
+
+### 命令
+
+`cmd`：
+
+```bat
+set JAVA_HOME=C:\Program Files\Java\jdk-17
+gradlew.bat :forge-1.20:build --no-daemon
+```
+
+PowerShell：
+
+```powershell
+$env:JAVA_HOME = 'C:\Program Files\Java\jdk-17'
+.\gradlew.bat :forge-1.20:build --no-daemon
+```
+
+产物：`target/Dynmap-3.6-forge-1.20.jar`
+
+首次构建约 10 分钟（要下载 Gradle 发行版、ForgeGradle 与 MC 1.20 依赖）；之后有缓存约 1 分钟。
+
+### ⚠️ 本分支对 `settings.gradle` 的改动
+
+上游 `settings.gradle` 声明了 **40+ 个子项目**（含 17 个 Fabric 版本）。Gradle 默认会**无条件配置全部子项目**，导致每个 Fabric 模块都通过 Loom 去下载对应版本的 Minecraft，合计十几 GB——即使你只想构建 `:forge-1.20`。
+
+而 `:forge-1.20:build` 实际只需要三个项目：
+
+```
+:forge-1.20 → :DynmapCore → :DynmapCoreAPI
+```
+
+因此本分支把 `settings.gradle` 收窄为这三个项目。**副作用**：本分支无法再构建 Bukkit / Spigot / Fabric 目标。
+
+需要恢复完整平台支持：
+
+```bash
+git show v3.6:settings.gradle > settings.gradle
+```
+
+（代价是重新面对上面那个多版本下载问题。）
+
+---
+
+## 部署
+
+```bash
+# 1) 备份原版 jar
+sudo docker exec MCSM-b2628e cp \
+  "/data/mods/[Olimap]Dynmap-3.6-forge-1.20.jar" \
+  "/data/mods/[Olimap]Dynmap-3.6-forge-1.20.jar.bak"
+
+# 2) 新 jar 先传到宿主机（如 /tmp/），再放进容器（文件名含方括号，务必加引号）
+sudo docker cp /tmp/Dynmap-3.6-forge-1.20.jar \
+  'MCSM-b2628e:/data/mods/[Olimap]Dynmap-3.6-forge-1.20.jar'
+
+# 3) 追加配置
+sudo docker exec MCSM-b2628e sh -c 'cat >> /data/dynmap/configuration.txt <<EOF
+
+# Dynmap-KubeJS API patch
+autorender-radius: 1000
+autorender-world: world
+autorender-map: flat
+EOF'
+```
+
+`DynmapBlockScan` **不需要替换**——补丁没有改动任何方法签名。
+
+---
+
+## 验证
+
+重启服务器后：
+
+```bash
+sudo docker exec MCSM-b2628e grep -E 'apiRunCommand|apiAutoRender|\[api\]' /data/logs/latest.log | tail -30
+```
+
+预期输出：
+
+```
+[Dynmap] apiRunCommand: /dynmap radiusrender world 0 0 1000 flat
+[Dynmap] [api] ...（渲染进度信息）
+```
+
+### 产物自检
+
+对已构建的 jar 可以直接反汇编确认补丁在里面：
+
+```bash
+javap -p -classpath target/Dynmap-3.6-forge-1.20.jar org.dynmap.forge_1_20.DynmapPlugin | findstr api
+javap -c -p -classpath target/Dynmap-3.6-forge-1.20.jar org.dynmap.forge_1_20.DynmapMod | findstr apiAutoRender
+```
+
+应分别看到：
+
+```
+public boolean apiRunCommand(java.lang.String);
+public void apiAutoRender();
+```
+
+```
+invokevirtual #242   // Method org/dynmap/forge_1_20/DynmapPlugin.apiAutoRender:()V
+```
+
+---
+
+## 已知限制
+
+1. **`/dynmap` 命令依然是坏的。** 本分支绕开了它，没有修它。控制台/游戏内仍然不能用 `/dynmap`。
+2. **根因未证实。** 不能据此断定是 KubeJS 的问题。
+3. **渲染中心固定 `0 0`。** 见上文。
+4. **升级需重新打补丁。** 跟随上游新版本时需要重新应用这两处改动。
+5. **每次构建都是 `3.6-Dev` 版本号**，除非设置 `BUILD_NUMBER` 环境变量。
+6. 构建目标为 Forge `1.20-46.0.1`（与上游官方 `Dynmap-3.6-forge-1.20.jar` 相同的目标），运行在 Forge 47.4.16 / MC 1.20.1 上。
+
+---
+
+## 兼容性
+
+| | 版本 |
+|---|---|
+| Minecraft | 1.20 / 1.20.1（`mods.toml` 声明 `[1.20,1.21)`） |
+| Forge | 46+（声明 `[46,)`，实测 47.4.16） |
+| Java | 17 |
+| DynmapBlockScan | 3.6-251（二进制兼容，无需改动） |
+
+---
+
+## 上游
+
+本分支基于 [webbukkit/dynmap](https://github.com/webbukkit/dynmap) `v3.6`。
+
+上游原始 README 保留在 [`README.upstream.md`](README.upstream.md)，包含完整的平台支持列表、数据存储说明与构建指南。
+
+Dynmap 采用 Apache Public License v2，本分支沿用同一许可。

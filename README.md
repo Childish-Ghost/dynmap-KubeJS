@@ -1,106 +1,146 @@
 # Dynmap-KubeJS
 
-> **TL;DR (English)** — A fork of [Dynmap](https://github.com/webbukkit/dynmap) 3.6 for **Minecraft 1.20.1 / Forge** that adds a render entry point **bypassing Minecraft's command dispatcher**, so map rendering still works on servers where Dynmap's `/dynmap` command fails to register. Prebuilt jar is on the [Releases](../../releases) page.
+> **TL;DR (English)** — A fork of [Dynmap](https://github.com/webbukkit/dynmap) for **Minecraft 1.20.1 / Forge**.
 >
-> 中文说明见下。
+> Dynmap's Forge port registered its commands at `ServerAboutToStartEvent`, which is too late for Forge 1.19+ — the nodes never made it into the command tree the game resolves against. This fork registers them at `RegisterCommandsEvent` instead, restoring `/dynmap`, `/dmap`, `/dmarker` and `/dynmapexp` with their original syntax. A programmatic render API is also included as a fallback that does not depend on the command system at all.
+>
+> Prebuilt jar: [Releases](../../releases). 中文说明见下。
 
 ---
 
 ## 这是什么
 
-这是 [Dynmap](https://github.com/webbukkit/dynmap) 的一个派生分支，基线是上游 **`v3.6`** 标签（commit `cee25bc518`）。
+[Dynmap](https://github.com/webbukkit/dynmap) 的派生分支，基线是上游 **`v3.6`** 标签（commit `cee25bc518`）。
 
-它在原版 Dynmap 之上只做了一件事：**给 Dynmap 内核加了一个不经过 Minecraft 命令系统的渲染入口**，用于绕开「`/dynmap` 命令注册成功但无法执行」的问题。
+在原版 Dynmap 之上做了两件事：
 
-除补丁涉及的两个文件外，其余代码与上游 `v3.6` 完全一致。
+1. **修复命令注册时机** —— 让 `/dynmap`、`/dmap`、`/dmarker`、`/dynmapexp` 四个命令**按原版语法真正可用**。（主要改动）
+2. **新增渲染 API** —— `apiRunCommand` / `apiAutoRender`，完全不依赖命令系统，作为保底手段。
+
+只保留 **MC 1.20 / 1.20.1 的 Forge 平台**，其余 35 个平台模块已从仓库删除。
 
 ---
 
-## 背景：`/dynmap` 命令失效
+## 根因：命令注册得太晚了
 
 ### 现象
 
-在 Minecraft **1.20.1 / Forge 47.4.16** 服务器上：
+服务器：Minecraft **1.20.1** / Forge **47.4.16** / Java 17。
 
 | 项目 | 状态 |
 |---|---|
-| Dynmap Web 地图 | ✅ 正常（`http://<服务器>:8123`） |
-| 方块渲染 / 增量更新 | ✅ 正常 |
-| 命令注册 | ✅ 日志打印 `[Dynmap] Register commands` |
-| **`/dynmap` 手动触发渲染** | ❌ **无法执行** |
+| Dynmap Web 地图 | ✅ 正常 |
+| 方块渲染、增量更新 | ✅ 正常 |
+| 命令注册日志 | ✅ 打印 `Register commands` |
+| **`/dynmap` 等四个命令** | ❌ **无法执行** |
 | `/spark`、原版命令 | ✅ 正常 |
 
-即 Dynmap **功能是好的**，只是无法通过命令主动触发全图/半径渲染。
+最迷惑的地方是：**日志明明说注册成功了，命令却用不了。**
 
-### 排查过程中的关键事实
+### 原因
 
-- Forge 生命周期顺序为 `RegisterCommandsEvent` → `ServerAboutToStartEvent` → `ServerStartedEvent`，且 `allowLogins` 是在 `ServerStartedEvent` **之后**才置位的。
-- 服务器曾因 DynmapBlockScan 扫描期间的 `Invalid modellist patch` 刷屏触发 `ServerHangWatchdog`（单 tick 超 60 秒）。已通过把 `server.properties` 的 `max-tick-time` 提到 `1800000` 解决，**与本次改动无关**，但排查时容易混淆。
-- 社区有指向 KubeJS 的说法。但实际检查 KubeJS 2001 的 mixin 源码后可以确认：其 mixin 只注入 `MinecraftServer` 的 `<init>` / `tickServer` / `reloadResources`，以及给 `CommandSourceStack` 增加一个 `kjs$sendSuccess` 重载，**不触碰 `Commands` 与命令派发器**。
+Forge 1.19+ 的 `Commands` 在构造时会触发 `RegisterCommandsEvent`，**这才是游戏真正解析命令所用的钩子**。事件顺序是：
 
-> ⚠️ **诚实说明**：`/dynmap` 失效的**根因至今未被证实**。KubeJS 是嫌疑人之一，但证据不足以下定论。
->
-> 本分支**没有去修根因**，而是让渲染**绕开命令系统**——所以即使根因始终不明，渲染照样能跑。
+```
+RegisterCommandsEvent            ← 正确的注册点
+    ↓
+ServerAboutToStartEvent          ← Dynmap 在这里注册（太晚了）
+    ↓
+ServerStartedEvent
+```
+
+Dynmap 的 Forge 端写的是 **1.12 时代的老写法** —— 在 `ServerAboutToStartEvent` 里直接往 `server.getCommands().getDispatcher()` 塞节点：
+
+```java
+// 原版 Dynmap —— 时机错误
+@SubscribeEvent
+public void onServerStarting(ServerAboutToStartEvent event) {
+    server = event.getServer();
+    if(plugin == null) plugin = proxy.startServer(server);
+    plugin.onStarting(server.getCommands().getDispatcher());   // ← 太晚
+}
+```
+
+整个仓库 grep `RegisterCommandsEvent` **零命中** —— 这个事件从未被使用过。
+
+节点确实被加进了 dispatcher，所以日志正常；但它们没有成为游戏解析命令那棵树的一部分，因此命令无法执行。
 
 ---
 
-## 补丁做了什么
+## 修复
 
-改动共 **2 个文件、+70 行**，全部落在非核心类中。
-
-### 1. `DynmapPlugin.apiRunCommand(String)`
+### 1. 在正确的事件里注册（`DynmapMod`）
 
 ```java
-public boolean apiRunCommand(String cmdline)
+@SubscribeEvent
+public void onRegisterCommands(RegisterCommandsEvent event) {
+    CommandDispatcher<CommandSourceStack> cd = event.getDispatcher();
+    new DynmapCommand(null).register(cd);
+    new DmapCommand(null).register(cd);
+    new DmarkerCommand(null).register(cd);
+    new DynmapExpCommand(null).register(cd);
+    commandsRegistered = true;
+    Log.info("Register commands (RegisterCommandsEvent): ...");
+}
 ```
 
-等价于在服务器控制台敲 `/dynmap <cmdline>`，但**不经过命令派发器**，直接把命令字符串交给 Dynmap 内核自己的命令处理器 `DynmapCore.processCommand(...)`。
+### 2. 命令处理器延迟解析 plugin（`DynmapCommandHandler`）
 
-### 2. `DynmapPlugin.apiAutoRender()`
+`RegisterCommandsEvent` 比 `ServerAboutToStartEvent` **更早**触发，那时 `DynmapPlugin` 还不存在（它在 `ServerAboutToStartEvent` 才创建，创建时还会顺带跑 `onEnable()` 建 core、读配置、广播 API）。
 
-读取配置项，在服务器启动完成后自动触发一次半径渲染。由 `DynmapMod.onServerStarted()` 调用。
-
-### 这两处是怎么协同的
+所以**不能**为了注册命令而提前创建 plugin —— 那会打乱初始化时序。做法是让命令处理器**延迟解析**目标：
 
 ```java
-DynmapCommandSender dsender = new ForgeCommandSender() {   // 复用无参构造：内部 sender 保持 null
-    @Override public void sendMessage(String msg) { Log.info("[api] " + msg); }   // 但 sendMessage 永不空指针
-};
-return core.processCommand(dsender, "dynmap", cmd, args);
+private DynmapPlugin plugin() {
+    return (plugin != null) ? plugin : DynmapMod.plugin;   // 执行时才解析
+}
 ```
 
-`ForgeCommandSender` 的无参构造函数会把内部的 `sender` 留为 `null`，而它自己的 `sendMessage()` 是空安全的。Dynmap 的渲染路径（`MapManager.renderWorldRadius` / `renderFullWorld`）里有若干处会无条件调用 `sender.sendMessage(...)`——用一个非空的匿名子类顶上去，就永远不会空指针，**因此完全不需要改动 `MapManager`**。
+节点提前注册，实际执行时再去拿已经就绪的 plugin。
 
-### 启动时序（已验证）
+### 3. 保留一条受保护的兜底路径（`DynmapPlugin.onStarting`）
+
+```java
+if (DynmapMod.commandsRegistered) {
+    Log.info("Commands already registered at RegisterCommandsEvent");
+    return;                       // 同一个 literal 注册两次会让 Brigadier 抛异常
+}
+```
+
+两条路径**只会走一条** —— Brigadier 的 `CommandDispatcher.register()` 在遇到已存在的 literal 时会尝试合并子节点，而子节点是参数节点（非 literal），会直接抛出 `IllegalStateException`。
+
+### 4. 诊断日志
+
+`onServerStarting` 现在会打印实际 dispatcher 里是否还有那四个命令：
 
 ```
-DynmapMod.onServerStarted
-  └─ plugin.serverStarted()   → onStart() → core.enableCore(null)
-                                 → initConfiguration(null) → configuration = new ConfigurationNode(f)
-  └─ plugin.apiAutoRender()   ← 此刻 core 与 configuration 必定已就绪
+[Dynmap] live dispatcher: dynmap=true dmap=true dmarker=true dynmapexp=true rootchildren=NN
 ```
+
+如果这里显示 `dynmap=false`，说明游戏执行的 dispatcher 与注册时用的**不是同一个实例** —— 那才是真正的根因。这条日志就是为了在服务器上一次性判定。
+
+> ⚠️ **诚实说明**：这个修复在**字节码层面已完整验证**（见下），但**尚未在你的服务器上实测**。四年未动的注册时机是一个真实的 bug，修复它有充分依据；但如果你期望的是"绝对确定"，那需要你启动一次服务器来确认。请把上面那行诊断日志发回来。
 
 ---
 
-## 方案对比
+## 渲染 API（保底手段）
 
-| | 方案甲 | **方案乙2（本分支采用）** |
+即使命令修复不生效，这两个方法也能让渲染跑起来 —— 它们完全不经过 Minecraft 的命令系统。
+
+| 方法 | 签名 | 用途 |
 |---|---|---|
-| 改动位置 | `MapManager` + 把 `renderWorldRadius` 改 `public` + 3 处判空 | `DynmapPlugin` 内新增 2 个方法 + `DynmapMod` 1 行 |
-| 是否触碰核心类 | 是 | **否** |
-| 需要 AccessTransformer | 否 | 否 |
-| 需要 `createCommandSourceStack` | 否 | 否 |
-| 需要 KubeJS 参与 | 否 | **否** |
-| 与 DynmapBlockScan 兼容 | 签名变更，有风险 | **零风险（无签名变更）** |
-| sender 为 null | 打补丁绕开 | 匿名子类顶替，永不空指针 |
+| `apiRunCommand` | `public boolean apiRunCommand(String cmdline)` | 执行任意 `/dynmap` 子命令（不含前导 `/` 与 `dynmap`） |
+| `apiAutoRender` | `public void apiAutoRender()` | 按配置在启动时自动渲染一次 |
 
-放弃的其他路线：改用 BlueMap（需要 Java 21，且 `BluemapCreateEntityAddon` 要求 BlueMap ≥ 5.7）、KubeJS 运行时 mixin 注入（KubeJS 不支持）、KubeJS 脚本反射（`renderWorldRadius` 是包级私有）、编辑 `run.sh` / `-Xbootclasspath/a:` / `-Djava.class.path`（均无效）。
+实现要点：`ForgeCommandSender` 的无参构造会把内部 `sender` 留为 `null`，而它自己的 `sendMessage()` 是空安全的。用一个匿名子类顶上去，Dynmap 渲染路径里那些无条件调用 `sender.sendMessage(...)` 的地方就永远不会空指针 —— **因此完全不需要改动 `MapManager`**。
 
----
+`DynmapMod.plugin` 是 `public static`，任何模组（含 KubeJS）都能反射调用：
 
-## 配置
+```java
+DynmapMod.plugin.apiRunCommand("radiusrender world 0 0 1000 flat");
+```
 
-在 `dynmap/configuration.txt` 中追加：
+配置（`dynmap/configuration.txt`，不写则自动渲染不启用）：
 
 ```yaml
 autorender-radius: 1000
@@ -108,40 +148,35 @@ autorender-world: world     # 可选，默认 world
 autorender-map: flat        # 可选，默认 flat
 ```
 
-`autorender-radius` ≤ 0 或缺失时，自动渲染**不启用**（启动日志会说明）。
+渲染中心目前固定为 `0 0`；走 `/dynmap radiusrender <world> <x> <z> <radius> <map>` 则坐标由你指定。
 
-渲染中心坐标目前**固定为 `0 0`**。需要别的中心点，或想要 `autorender-x` / `autorender-z` 配置项，改 `apiAutoRender()` 即可。
+---
 
-`apiRunCommand` 是 `public` 方法，`DynmapMod.plugin` 是 `public static`，所以任何模组（包括 KubeJS）都可以反射调用：
+## 与原版用法一致
 
-```java
-DynmapMod.plugin.apiRunCommand("radiusrender world 0 0 1000 flat");
+命令可用之后，用法与官方 Dynmap 文档**完全相同**：
+
+```
+/dynmap radiusrender <world> <x> <z> <radius> [<map>]
+/dynmap fullrender <world>[:<map>]
+/dynmap cancelrender <world>
+/dynmap stats
+/dmap ...
+/dmarker ...
+/dynmapexp ...
 ```
 
-但**默认路径完全不需要 KubeJS**——服务器启动时自动渲染。
+服务器控制台里**不要带前导 `/`**（这是 Minecraft 本身的规则，与原版一致）。
 
 ---
 
 ## 构建
 
-### 环境要求
-
 | 项目 | 版本 |
 |---|---|
-| JDK | **17**（必须是 17，不能用 21） |
-| Gradle | 7.4.2（wrapper 会自动下载） |
-| ForgeGradle | 5.1.+（`forge-1.20/build.gradle` 中声明） |
-
-### 命令
-
-`cmd`：
-
-```bat
-set JAVA_HOME=C:\Program Files\Java\jdk-17
-gradlew.bat :forge-1.20:build --no-daemon
-```
-
-PowerShell：
+| JDK | **17**（必须，不能用 21） |
+| Gradle | 7.4.2（wrapper 自动下载） |
+| ForgeGradle | 5.1.+ |
 
 ```powershell
 $env:JAVA_HOME = 'C:\Program Files\Java\jdk-17'
@@ -150,35 +185,30 @@ $env:JAVA_HOME = 'C:\Program Files\Java\jdk-17'
 
 产物：`target/Dynmap-3.6-forge-1.20.jar`
 
-首次构建约 10 分钟（要下载 Gradle 发行版、ForgeGradle 与 MC 1.20 依赖）；之后有缓存约 1 分钟。
+首次构建约 10 分钟（需下载 Gradle 发行版 + ForgeGradle + MC 1.20 依赖），之后有缓存约 1 分钟。
 
-### ⚠️ 本分支只保留 `forge-1.20`
+### 本分支只保留 `forge-1.20`
 
-上游仓库包含 **40+ 个平台模块**：spigot、15 个 `bukkit-helper-*`、10 个 Fabric 版本、9 个 Forge 版本。
+上游包含 **40+ 个平台模块**（spigot、15 个 `bukkit-helper-*`、10 个 Fabric 版本、9 个 Forge 版本）。
 
-本分支把它们全部删除，只留 `forge-1.20`。两个原因：
+它们已从本仓库**删除**，原因有二：
 
-1. **构建会被拖垮。** Gradle 默认**无条件配置全部子项目**——即使只想构建 `:forge-1.20`，每个 Fabric 模块也会通过 Loom 去下载对应版本的 Minecraft，合计十几 GB。
-2. **本分支只为 MC 1.20 / 1.20.1 Forge 服务器服务。**
+1. **Gradle 会无条件配置全部子项目** —— 即使只构建 `:forge-1.20`，每个 Fabric 模块也会通过 Loom 去下载对应版本的 Minecraft，合计十几 GB。
+2. 本分支只为 MC 1.20 / 1.20.1 Forge 服务。
 
-`:forge-1.20:build` 实际只需要三个项目：
+`:forge-1.20:build` 只需要三个项目：
 
 ```
 :forge-1.20 → :DynmapCore → :DynmapCoreAPI
 ```
 
-因此其余 **35 个平台模块已从仓库删除**，`settings.gradle` 也收窄为这三个项目。
-
-需要完整的多平台源码时，从上游标签取：
+取回完整多平台源码：
 
 ```bash
 git remote add upstream https://github.com/webbukkit/dynmap.git
 git fetch upstream --tags
-git show v3.6:settings.gradle        # 查看原始文件
-git checkout v3.6                    # 或直接切到该标签
+git checkout v3.6
 ```
-
-（代价是重新面对上面那个多版本下载问题。）
 
 ---
 
@@ -190,69 +220,49 @@ sudo docker exec MCSM-b2628e cp \
   "/data/mods/[Olimap]Dynmap-3.6-forge-1.20.jar" \
   "/data/mods/[Olimap]Dynmap-3.6-forge-1.20.jar.bak"
 
-# 2) 新 jar 先传到宿主机（如 /tmp/），再放进容器（文件名含方括号，务必加引号）
+# 2) 新 jar 先传到宿主机（如 /tmp/），再放进容器
+#    文件名含方括号，整段务必加引号
 sudo docker cp /tmp/Dynmap-3.6-forge-1.20.jar \
   'MCSM-b2628e:/data/mods/[Olimap]Dynmap-3.6-forge-1.20.jar'
-
-# 3) 追加配置
-sudo docker exec MCSM-b2628e sh -c 'cat >> /data/dynmap/configuration.txt <<EOF
-
-# Dynmap-KubeJS API patch
-autorender-radius: 1000
-autorender-world: world
-autorender-map: flat
-EOF'
 ```
 
-`DynmapBlockScan` **不需要替换**——补丁没有改动任何方法签名。
+`DynmapBlockScan` **不需要替换** —— 补丁没有改动任何方法签名。
 
 ---
 
 ## 验证
 
-重启服务器后：
+启动服务器后看这两行：
 
 ```bash
-sudo docker exec MCSM-b2628e grep -E 'apiRunCommand|apiAutoRender|\[api\]' /data/logs/latest.log | tail -30
+sudo docker exec MCSM-b2628e grep -E 'Register commands|live dispatcher' /data/logs/latest.log
 ```
 
-预期输出：
+期望：
 
 ```
-[Dynmap] apiRunCommand: /dynmap radiusrender world 0 0 1000 flat
-[Dynmap] [api] ...（渲染进度信息）
+[Dynmap] Register commands (RegisterCommandsEvent): dynmap=true dmap=true dmarker=true dynmapexp=true rootchildren=NN
+[Dynmap] live dispatcher: dynmap=true dmap=true dmarker=true dynmapexp=true rootchildren=NN
 ```
 
-### 产物自检
+然后游戏内或控制台试 `/dynmap stats`（控制台不带 `/`）。
 
-对已构建的 jar 可以直接反汇编确认补丁在里面：
+### 产物自证（不启动服务器也能验）
 
 ```bash
-javap -p -classpath target/Dynmap-3.6-forge-1.20.jar org.dynmap.forge_1_20.DynmapPlugin | findstr api
-javap -c -p -classpath target/Dynmap-3.6-forge-1.20.jar org.dynmap.forge_1_20.DynmapMod | findstr apiAutoRender
-```
-
-应分别看到：
-
-```
-public boolean apiRunCommand(java.lang.String);
-public void apiAutoRender();
-```
-
-```
-invokevirtual #242   // Method org/dynmap/forge_1_20/DynmapPlugin.apiAutoRender:()V
+javap -p -classpath target/Dynmap-3.6-forge-1.20.jar org.dynmap.forge_1_20.DynmapMod | findstr RegisterCommands
+javap -p -classpath target/Dynmap-3.6-forge-1.20.jar org.dynmap.forge_1_20.DynmapCommandHandler
 ```
 
 ---
 
 ## 已知限制
 
-1. **`/dynmap` 命令依然是坏的。** 本分支绕开了它，没有修它。控制台/游戏内仍然不能用 `/dynmap`。
-2. **根因未证实。** 不能据此断定是 KubeJS 的问题。
-3. **渲染中心固定 `0 0`。** 见上文。
-4. **升级需重新打补丁。** 跟随上游新版本时需要重新应用这两处改动。
-5. **每次构建都是 `3.6-Dev` 版本号**，除非设置 `BUILD_NUMBER` 环境变量。
-6. 构建目标为 Forge `1.20-46.0.1`（与上游官方 `Dynmap-3.6-forge-1.20.jar` 相同的目标），运行在 Forge 47.4.16 / MC 1.20.1 上。
+1. **命令修复未在真实服务器实测**（字节码已验证）。诊断日志会给出判定。
+2. **渲染中心固定 `0 0`**（仅指 `apiAutoRender` 的自动渲染；用 `/dynmap radiusrender` 时坐标由你指定）。
+3. **跟随上游升级需重新打补丁。**
+4. 构建版本号默认是 `3.6-Dev`，除非设置 `BUILD_NUMBER` 环境变量。
+5. 构建目标为 Forge `1.20-46.0.1`（与上游官方 jar 相同），运行在 Forge 47.4.16 / MC 1.20.1 上。
 
 ---
 
@@ -260,17 +270,13 @@ invokevirtual #242   // Method org/dynmap/forge_1_20/DynmapPlugin.apiAutoRender:
 
 | | 版本 |
 |---|---|
-| Minecraft | 1.20 / 1.20.1（`mods.toml` 声明 `[1.20,1.21)`） |
-| Forge | 46+（声明 `[46,)`，实测 47.4.16） |
+| Minecraft | 1.20 / 1.20.1（声明 `[1.20,1.21)`） |
+| Forge | 46+（实测 47.4.16） |
 | Java | 17 |
-| DynmapBlockScan | 3.6-251（二进制兼容，无需改动） |
+| DynmapBlockScan | 3.6-251，二进制兼容，无需改动 |
 
 ---
 
 ## 上游
 
-本分支基于 [webbukkit/dynmap](https://github.com/webbukkit/dynmap) `v3.6`。
-
-上游原始 README 保留在 [`README.upstream.md`](README.upstream.md)，包含完整的平台支持列表、数据存储说明与构建指南。
-
-Dynmap 采用 Apache Public License v2，本分支沿用同一许可。
+基于 [webbukkit/dynmap](https://github.com/webbukkit/dynmap) `v3.6`。上游原始 README 保留在 [`README.upstream.md`](README.upstream.md)。Apache Public License v2。

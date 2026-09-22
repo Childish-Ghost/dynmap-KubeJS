@@ -18,23 +18,6 @@ Dynmap 的 Forge 端在 `ServerAboutToStartEvent` 注册命令，对 Forge 1.19+
 
 服务器控制台不带前导 `/`。
 
-## 渲染 API
-
-不依赖命令系统，可作保底调用：
-
-```java
-DynmapMod.plugin.apiRunCommand("radiusrender world 0 0 1000 flat");
-DynmapMod.plugin.apiAutoRender();
-```
-
-配置 `dynmap/configuration.txt`：
-
-```yaml
-autorender-radius: 1000
-autorender-world: world
-autorender-map: flat
-```
-
 ## 构建
 
 JDK 17：

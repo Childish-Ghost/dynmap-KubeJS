@@ -1518,6 +1518,16 @@ public class DynmapPlugin
     private DynmapExpCommand dynmapexpCmd;
 
     public void onStarting(CommandDispatcher<CommandSourceStack> cd) {
+        /* Commands are registered at RegisterCommandsEvent - see DynmapMod.onRegisterCommands().
+           That is the hook Forge 1.19+ actually resolves commands against; adding nodes later,
+           at ServerAboutToStartEvent, leaves them out of that tree. Registering the same
+           literal twice makes Brigadier throw, so this path is now only a fallback for the
+           case where RegisterCommandsEvent never fired. */
+        if (DynmapMod.commandsRegistered) {
+            Log.info("Commands already registered at RegisterCommandsEvent");
+            return;
+        }
+        Log.warning("RegisterCommandsEvent did not fire - registering commands as fallback");
         /* Register command hander */
         dynmapCmd = new DynmapCommand(this);
         dmapCmd = new DmapCommand(this);
@@ -2059,18 +2069,29 @@ class DynmapCommandHandler
         this.plugin = p;
     }
 
+    /* Commands are registered at RegisterCommandsEvent, which fires before DynmapPlugin is
+       created (that happens at ServerAboutToStartEvent). Resolve the plugin lazily so the
+       nodes can be registered early and still find their target once the server is up. */
+    private DynmapPlugin plugin() {
+        return (plugin != null) ? plugin : DynmapMod.plugin;
+    }
+
     public void register(CommandDispatcher<CommandSourceStack> cd) {
         cd.register(Commands.literal(cmd).
             then(RequiredArgumentBuilder.<CommandSourceStack, String> argument("args", StringArgumentType.greedyString()).
-            executes((ctx) -> this.execute(plugin.getMCServer(), ctx.getSource(), ctx.getInput()))).
-            executes((ctx) -> this.execute(plugin.getMCServer(), ctx.getSource(), ctx.getInput())));
+            executes((ctx) -> this.execute(ctx.getSource(), ctx.getInput()))).
+            executes((ctx) -> this.execute(ctx.getSource(), ctx.getInput())));
     }
 
 //    @Override
-    public int execute(MinecraftServer server, CommandSourceStack commandSourceStack,
-        String cmdline) {
+    public int execute(CommandSourceStack commandSourceStack, String cmdline) {
+        DynmapPlugin p = plugin();
+        if (p == null) {
+            Log.warning("'" + cmd + "' used before Dynmap finished starting up");
+            return 0;
+        }
         String[] args = cmdline.split("\\s+");
-        plugin.onCommand(commandSourceStack, cmd, Arrays.copyOfRange(args, 1, args.length));
+        p.onCommand(commandSourceStack, cmd, Arrays.copyOfRange(args, 1, args.length));
         return 1;
     }
 

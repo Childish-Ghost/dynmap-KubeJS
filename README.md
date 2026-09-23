@@ -2,7 +2,7 @@
 
 > A fork of [Dynmap](https://github.com/webbukkit/dynmap) for **Minecraft 1.20.1 / Forge**. It fixes command registration so `/dynmap`, `/dmap`, `/dmarker` and `/dynmapexp` work with their original syntax. Prebuilt jar: [Releases](../../releases).
 
-Dynmap 的 Forge 端在 `ServerAboutToStartEvent` 注册命令，对 Forge 1.19+ 来说太晚 —— 日志显示注册成功，命令却无法执行。本分支改为在 `RegisterCommandsEvent` 注册。
+Dynmap 的 Forge 端在 `ServerAboutToStartEvent` 注册命令。`/reload` 会重建 `Commands` 并换掉 dispatcher，而上游只在启动时注册一次 —— 节点随旧 dispatcher 一起被丢弃，命令在玩家进服前就已失效。本分支改为在 `RegisterCommandsEvent` 注册，该事件对每次 `Commands` 重建都会触发。
 
 ## 用法
 
